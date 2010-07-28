@@ -6,4 +6,24 @@ struct TrackInfo {
 	char *chProgramm;
 };
 
+typedef struct {
+	
+	/* Settings */
+
+	int showInAppsWindow;
+	int sendMessageToChannel;
+	char *channelMessage;
+	char *appWindowText;
+	char *boundToServer;
+
+	/* */
+
+	void *lastPlayer;
+	char *playerName;
+	char *currentSong;
+	
+	/* intern */
+	HWND lastWindow;
+} NOW_PLAYING_CONTEXT;
+
 #endif

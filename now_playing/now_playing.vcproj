@@ -326,6 +326,10 @@
 			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}"
 			>
 			<File
+				RelativePath=".\common.c"
+				>
+			</File>
+			<File
 				RelativePath=".\lightalloy.c"
 				>
 			</File>
@@ -348,23 +352,11 @@
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}"
 			>
 			<File
-				RelativePath=".\lightalloy.h"
-				>
-			</File>
-			<File
 				RelativePath=".\nowplaying_plugin.h"
 				>
 			</File>
 			<File
 				RelativePath=".\shared.h"
-				>
-			</File>
-			<File
-				RelativePath=".\vlc.h"
-				>
-			</File>
-			<File
-				RelativePath=".\winamp.h"
 				>
 			</File>
 		</Filter>

@@ -1,51 +1,19 @@
-/*
-	Teamspeak 3 Winamp Now Playing Plugin 
-    Copyright (C) 2009 antihack3r
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
-*/
 #include "nowplaying_plugin.h"
-#include "winamp.h"
-#include "vlc.h"
-#include "lightalloy.h"
-
-
-#define _strcpy(dest, destSize, src) strcpy_s(dest, destSize, src)
-#define snprintf sprintf_s
-
 
 CRITICAL_SECTION cs;
+TS3Functions ts3Functions;
 
-static struct TS3Functions ts3Functions;
-int iRun = 0;
-HANDLE hThread;
-static char* pluginCommandID = 0;
-static struct TrackInfo lastInfo;
-char chChannelMsg[300];
-char chApplications[300];
-char chBoundToUniqueID[300];
-int iEnableApplications;
-int iEnableAutoChannelMsg;
 
+HANDLE mainThread;
+char *pluginCommandID;
+NOW_PLAYING_CONTEXT context;
 
 const char* ts3plugin_name() {
     return "Now Playing Plugin";
 }
 
 const char* ts3plugin_version() {
-    return "0.11";
+    return "0.2";
 }
 
 int ts3plugin_apiVersion() {
@@ -53,7 +21,7 @@ int ts3plugin_apiVersion() {
 }
 
 const char* ts3plugin_author() {
-    return "antihack3r";
+    return "antihack3r/evilpie";
 }
 
 const char* ts3plugin_description() {
@@ -65,82 +33,79 @@ void ts3plugin_setFunctionPointers(const struct TS3Functions funcs) {
 }
 
 int ts3plugin_init() {
-	char chConfigPath[450];
-	char chFilePath[500];
-	FILE *fFile;
+	char configPath[MAX_PATH];
+	char filePath[MAX_PATH];
+	FILE *file;
 
 	InitializeCriticalSection (&cs);
-	
-	ts3Functions.getConfigPath (chConfigPath, sizeof (chConfigPath));
 
-	snprintf (chFilePath, 500, "%s%s", chConfigPath, "now_playing_plugin.ini");
-	
-	printf ("File Path: %s\n", chFilePath);
+	ts3Functions.getConfigPath (configPath, MAX_PATH);
+	sprintf_s (filePath, MAX_PATH, "%s%s", configPath, "now_playing_plugin.ini");
 
-	if (fopen_s (&fFile, chFilePath, "r") != 0) {
-		WritePrivateProfileString ("config", "channel_message", "I'm listening to [b]{title}[/b].", chFilePath);
-		WritePrivateProfileString ("config", "applications", "{title}", chFilePath);
-		WritePrivateProfileString ("config", "enable_applications", "1", chFilePath);
-		WritePrivateProfileString ("config", "auto_channel_message", "0", chFilePath);
-		WritePrivateProfileString ("config", "bound_to_unique_id", "", chFilePath);
-		if (fFile != NULL) fclose (fFile);
+	if (fopen_s (&file, filePath, "r") != 0) {
+		WritePrivateProfileString ("config", "channel_message", "I'm listening to [b]{title}[/b].", filePath);
+		WritePrivateProfileString ("config", "applications", "{title}", filePath);
+		WritePrivateProfileString ("config", "enable_applications", "1", filePath);
+		WritePrivateProfileString ("config", "auto_channel_message", "0", filePath);
+		WritePrivateProfileString ("config", "bound_to_unique_id", "", filePath);
+
+		if (file) {
+			fclose (file);
+		}
 	}
 
-	GetPrivateProfileString ("config", "channel_message", "I'm listening to [b]{title}[/b].", 
-		chChannelMsg, 300, chFilePath);
-	GetPrivateProfileString ("config", "applications", "{title}", 
-		chApplications, 300, chFilePath);
+	context.channelMessage = malloc(200);
+	context.appWindowText = malloc(200);
+	context.boundToServer = malloc(200);
 
-	GetPrivateProfileString ("config", "bound_to_unique_id", "", 
-		chBoundToUniqueID, 300, chFilePath);
+	if (!context.channelMessage || !context.appWindowText || !context.boundToServer) {
+		free (context.channelMessage); /* one malloc might have worked */
+		free (context.appWindowText);
+		free (context.boundToServer);
 
-	printf ("chApplications: %s\n", chApplications);
-	printf ("chBoundToUniqueID: %s\n", chBoundToUniqueID);
-
-	if (GetPrivateProfileInt ("config", "enable_applications", 1, chFilePath) >= 1) {
-		iEnableApplications = 1;
-	}
-	else {
-		iEnableApplications = 0;
-	}
-
-	if (GetPrivateProfileInt ("config", "auto_channel_message", 0, chFilePath) >= 1) {
-		iEnableAutoChannelMsg = 1;
-	}
-	else {
-		iEnableAutoChannelMsg = 0;
-	}
-		
-
-	iRun = 1;
-	hThread = CreateThread (NULL, 0, MainLoop, NULL, 0, NULL);  	
-	if (hThread == 0) {
-		printf ("Now Playing: Error could not create Thread %d\n", GetLastError ());
 		return 1;
 	}
 
-    return 0;  /* 0 = success, 1 = failure */
+	GetPrivateProfileString ("config", "channel_message", "I'm listening to [b]{title}[/b].", 
+		context.channelMessage, 200, filePath);
+	GetPrivateProfileString ("config", "applications", "{title}", 
+		context.appWindowText,  200, filePath);
+	GetPrivateProfileString ("config", "bound_to_unique_id", "", 
+		context.boundToServer,  200, filePath);
+
+
+	context.showInAppsWindow = (GetPrivateProfileInt ("config", "enable_applications", 1, chFilePath) >= 1);
+	context.sendMessageToChannel = (GetPrivateProfileInt ("config", "auto_channel_message", 0, chFilePath) >= 1);
+
+
+	mainThread = CreateThread (NULL, 0, MainLoop, NULL, 0, NULL);  	
+	if (!mainThread) {
+		printf ("Now Playing: Error could not create Main-Thread %d\n", GetLastError ());
+		return 1;
+	}
+
+    return 0;
 }
 
 void ts3plugin_shutdown() {	
-	if (hThread != 0) {
+	if (mainThread != 0) {
 		iRun = 0;
-		WaitForSingleObject (hThread, 500);
-		CloseHandle (hThread);
+		WaitForSingleObject (mainThread, 500);
+		CloseHandle (mainThread);
 		DeleteCriticalSection (&cs);
 	}
 
-	if(pluginCommandID) {
+	if (pluginCommandID) {
 		free(pluginCommandID);
 		pluginCommandID = 0;
 	}
 }
 
 void ts3plugin_registerPluginCommandID(const char* commandID) {
-	const size_t sz = strlen(commandID) + 1;
-	pluginCommandID = (char*)malloc(sz);
-	memset(pluginCommandID, 0, sz);
-	_strcpy(pluginCommandID, sz, commandID);
+	const size_t size = strlen(commandID) + 1;
+	pluginCommandID = (char*)malloc(size);
+	memset(pluginCommandID, 0, size);
+	strcpy_s(pluginCommandID, size, commandID);
 }
 
 
