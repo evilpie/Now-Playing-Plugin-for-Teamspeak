@@ -45,11 +45,11 @@ const char* ts3plugin_name() {
 }
 
 const char* ts3plugin_version() {
-    return "0.11";
+    return "0.13";
 }
 
 int ts3plugin_apiVersion() {
-	return 5;
+	return 7;
 }
 
 const char* ts3plugin_author() {
